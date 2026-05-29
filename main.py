@@ -70,7 +70,7 @@ def main(stdscr : curses.window):
 
     # create a 2d list, board_data using height and width.
     board_data = [
-       [None] * BOARD_WIDTH for _ in range(BOARD_HEIGHT)
+       [''] * BOARD_WIDTH for _ in range(BOARD_HEIGHT)
     ]
     # Input ──────────────────────────────────────────────────────────
 
