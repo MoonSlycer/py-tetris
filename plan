@@ -1,0 +1,29 @@
+Board
+	2d array
+	"settled tetromino data"
+ActiveTetromino
+	class
+	properties:
+	piece type
+
+	x position
+	y position
+
+RenderBoard
+
+collision detection:
+	player enters their desired move (left, right, rotate, or nothing)
+		transformation = (desired_y, desired_x, desired_shape)
+			(desired y and x are ABSOLUTE not relative.)
+		currentState = list of each block's coords.
+		desiredState = list of each block's coords after transformation.
+	FIRST detect collision with player's desired move ONLY.
+	THEN detect collision with gravity.
+		makes it so that even if player inputs an invalid move, piece can still
+		 move down.
+	detectCollision():
+		loop through each position in desiredState:
+			return 1 if ANY position is out of bounds
+			return 1 if ANY position overlaps with board data.
+			else: return 0
+	if detectCollision(): keep currentState as it is.

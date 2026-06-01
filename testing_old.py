@@ -5,55 +5,78 @@
 # │ Purpose:  test main gameplay logic without curses.               │
 # └──────────────────────────────────────────────────────────────────┘
 
-class FallingTetromino:
-    """class to represent the falling tetromino"""
-    def __init__(self, tetromino, init_y, init_x):
-        self.tetromino = copy2DArray(tetromino)
-        self.y = init_y
-        self.x = init_x
-        self.height = len(self.tetromino)-1
-        self.width = len(self.tetromino[0])-1
+class Board:
+    def __init(self, height, width):
+        """create an empty 2d array to represent the game board."""
+        self.height = height
+        self.width = width
+
+        # 'data' stores all blocks currently 'settled' (not falling)
+        self.data = [
+            [''] * width for _ in range(height)
+        ]
+    def addData(self):
+        """add """
 
 
-    def getTetromino(self):
-        return self.tetromino
+    class ActiveTetromino:
+        """represents the tetromino currently in play."""
+        def __init__(self, tetromino, init_y, init_x):
+            self.tetromino = copy2DArray(tetromino)
+            self.y = init_y
+            self.x = init_x
+            self.height = len(self.tetromino)-1
+            self.width = len(self.tetromino[0])-1
 
 
-    def getY(self):
-        return self.y
+        def getTetromino(self):
+            return self.tetromino
 
 
-    def getX(self):
-        return self.x
+        def getY(self):
+            return self.y
 
 
-    def getBlockPositions(self):
-        """Return the board position of each block in the tetromino."""
-        positions = []
-        for y in range(self.height):
-            for x in range(self.width):
-                # check if there is data at current position.
-                if self.tetromino[y][x] != '':
-                    # append the board position of each block in
-                    # tetromino.
-                    positions.append(
-                        (self.y + y, self.x + x)
-                    )
-        return positions
+        def getX(self):
+            return self.x
 
 
-    def rotateRight(self):
-        """update self.tetromino to be itself but rotated right 90
-         degrees.
-        """
-        old_tetromino = copy2DArray(self.tetromino)
-        new_tetromino = empty2DArray(self.height, self.width)
+        def getBlockPositions(self):
+            """Return the board position of each block in the tetromino."""
+            positions = []
+            for y in range(self.height):
+                for x in range(self.width):
+                    # check if there is data at current position.
+                    if self.tetromino[y][x] != '':
+                        # append the board position of each block in
+                        # tetromino.
+                        positions.append(
+                            (self.y + y, self.x + x)
+                        )
+            return positions
 
-        for y in range(self.height):
-            for x in range(self.width):
-                new_tetromino[x][self.width-y] = old_tetromino[y][x]
 
-        self.tetromino = new_tetromino
+        def rotateRight(self):
+            """update self.tetromino to be itself but rotated right 90
+             degrees.
+            """
+            old_tetromino = copy2DArray(self.tetromino)
+            new_tetromino = empty2DArray(self.height, self.width)
+
+            for y in range(self.height):
+                for x in range(self.width):
+                    new_tetromino[x][self.width-y] = old_tetromino[y][x]
+
+            self.tetromino = new_tetromino
+
+        def maskTetromino(self):
+            """add self to a separate layer (empty board)."""
+            blank_board = empty2DArray(BOARD_HEIGHT, BOARD_WIDTH)
+
+            # add new_piece to blank board
+            for y, row in enumerate(new_piece):
+                for x, data in enumerate(row):
+                    blank_board[posY + y][posX + x] = data
 
 
 def empty2DArray(height, width):
@@ -133,24 +156,7 @@ def main():
     board_data = empty2DArray(BOARD_HEIGHT, BOARD_WIDTH)
 
     # set up board with blocks already on there.
-    board_data = [
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', '', '', ''],
+    board_data[17:] = [
         ['L', 'L', 'L', '', '', '', '', '', '', ''],
         ['L', 'S', 'S', 'T', '', '', 'Z', 'Z', '', ''],
         ['S', 'S', 'T', 'T', 'T', '', '', 'Z', 'Z', '']]
@@ -162,7 +168,6 @@ def main():
     posY = 0
     posX = 0
     new_piece = copy2DArray(T_TETROMINO)
-    new_tetromino = FallingTetromino(T_TETROMINO)
     while keyboard_input != 'q':
         # Input ──────────────────────────────────────────────────────────
         # get user input.
@@ -179,7 +184,6 @@ def main():
         # NOTE: should do this every frame to clear old falling piece
         #   position.
         blank_board = empty2DArray(BOARD_HEIGHT, BOARD_WIDTH)
-        display_data = empty2DArray(BOARD_HEIGHT, BOARD_WIDTH)
 
         # add new_piece to blank board
         for y, row in enumerate(new_piece):
