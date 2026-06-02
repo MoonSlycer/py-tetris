@@ -390,6 +390,7 @@ def main(stdscr : curses.window):
     old_screen_data = None
     keyboard_input = stdscr.getch()
     while keyboard_input != ord('q'):
+        start = time.time()
         # Input ──────────────────────────────────────────────────────────
         # get keyboard input.
         keyboard_input = stdscr.getch()
@@ -416,10 +417,13 @@ def main(stdscr : curses.window):
             movement = getTransformation(keyboard_input)
 
             # apply player movement to tetromino.
-            movement_collisions = active_tetromino.tryTransform(*movement)
+            movement_collisions = active_tetromino.tryTransform(0, *movement[1:])
 
-            # apply gravity to tetromino.
-            gravity_collisions = active_tetromino.tryTransform(gravity, 0, 0)
+            # apply gravity to tetromino if the player isnt moving down.
+            if not movement[0]:
+                gravity_collisions = active_tetromino.tryTransform(gravity, 0, 0)
+            else:
+                gravity_collisions = active_tetromino.tryTransform(movement[0], 0, 0)
 
             # lock piece if a collision is detected.
             if gravity_collisions:
@@ -469,7 +473,11 @@ def main(stdscr : curses.window):
                                          COLOR_PAIRS[color])
             board_win.refresh()
         old_screen_data = screen_data
-        time.sleep(0.01)
+
+        # keep frame rate at roughly 60fps
+        sleep_time = 1/60 - (time.time()-start)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
     # Terminate ──────────────────────────────────────────────────────
 
     return 0  # Return 0 indicates a successful completion
