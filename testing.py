@@ -5,6 +5,8 @@
 # │ Purpose:  test main gameplay logic without curses.               │
 # └──────────────────────────────────────────────────────────────────┘
 
+import time
+
 # 2D array of strings. used a lot in this game's logic.
 Matrix = list[list]
 
@@ -61,6 +63,34 @@ def getTetrominoShape(tetromino_name):
     return copyMatrix(tetrominos[tetromino_name])
 
 
+def getGravity(current_level):
+    """calculate how fast pieces should fall, given the current level."""
+    # source: https://tetris.wiki/Marathon
+    speed_curve = {
+        1 : 0.01667,
+        2 : 0.021017,
+        3 : 0.026977,
+        4 : 0.035256,
+        5 : 0.04693,
+        6 : 0.06361,
+        7 : 0.0879,
+        8 : 0.1236,
+        9 : 0.1775,
+        10 : 0.2598,
+        11 : 0.388,
+        12 : 0.59,
+        13 : 0.92,
+        14 : 1.46,
+        15 : 2.36,
+        16 : 3.91,
+        17 : 6.61,
+        18 : 11.43,
+        19 : 20.23,
+        20 : 36.6
+    }
+    return speed_curve[current_level]
+
+
 class Board:
     """represents current state of the board."""
     def __init__(self, height:int, width:int):
@@ -83,7 +113,9 @@ class Board:
 
 class ActiveTetromino:
     """class to represent the falling tetromino"""
-    def __init__(self, name:str, board:Board, init_y:int=0, init_x:int=2):
+    def __init__(self, name:str, board:Board,
+                 init_y:float=0,
+                 init_x:int=2):
         self.name = name
         self.board = board
         self.y = init_y
@@ -117,8 +149,10 @@ class ActiveTetromino:
     def setShape(self, new_shape:Matrix):
         self.shape = new_shape
 
-    def getY(self):
+    def getY_float(self):
         return self.y
+    def getY(self):
+        return int(self.y.__ceil__())
 
     def getX(self):
         return self.x
@@ -128,13 +162,13 @@ class ActiveTetromino:
         tetromino's shape.
         """
         positions = []
-        for cell_y, row in enumerate(self.shape):
+        for cell_y, row in enumerate(self.getShape()):
             for cell_x, cell in enumerate(row):
                 if cell:
                     # append the global board position of each occupied cell in
                     # tetromino.
                     positions.append(
-                        (self.y + cell_y, self.x + cell_x)
+                        (self.getY() + cell_y, self.getX() + cell_x)
                     )
         return positions
 
@@ -155,12 +189,12 @@ class ActiveTetromino:
         self.setShape(new_shape)
         return new_shape
 
-    def move(self, move_y:int, move_x:int):
+    def move(self, move_y:float, move_x:int):
         """move self in specified direction."""
         self.y += move_y
         self.x += move_x
 
-    def tryTransform(self, move_y:int, move_x:int,
+    def tryTransform(self, move_y:float, move_x:int,
                         rotate_dir:int):
         """attempt to transform the active tetromino."""
         # make a copy of active tetromino's state.
@@ -218,9 +252,13 @@ def main():
         ['L', 'S', 'S', 'T', '', '', 'Z', 'Z', '', ''],
         ['S', 'S', 'T', 'T', 'T', '', '', 'Z', 'Z', '']]
 
-    keyboard_input = ''
+    # initialize an active T tetromino.
     active_tetromino = ActiveTetromino('T', board)
-    gravity = 1
+
+    # get gravity.
+    gravity = getGravity(12)
+
+    keyboard_input = ''
     while keyboard_input != 'q':
         # Input ──────────────────────────────────────────────────────────
         # get user input.
