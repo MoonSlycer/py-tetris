@@ -127,7 +127,7 @@ class ActiveTetromino:
 
     def getState(self):
         """returns all data needed to recreate the active piece."""
-        state = (self.getName(), self.getY(),
+        state = (self.getName(), self.getY_float(),
                  self.getX(), self.getShape())
         return state
 

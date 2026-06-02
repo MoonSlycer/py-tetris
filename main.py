@@ -9,8 +9,7 @@
 import curses
 from curses import wrapper
 import time
-from random import randrange
-
+from random import shuffle
 # initialize curses.
 stdscr = curses.initscr()
 stdscr.nodelay(True)
@@ -75,6 +74,13 @@ def getTetrominoShape(tetromino_name):
     }
     return copyMatrix(tetrominos[tetromino_name])
 
+def generateBag():
+    """use generator to generate 'bags' of pieces."""
+    bag = ['I','J','L','O','S','T','Z']
+    shuffle(bag)
+    for piece in bag:
+        yield piece
+
 
 def getGravity(current_level):
     """calculate how fast pieces should fall, given the current level."""
@@ -129,6 +135,26 @@ class Board:
             self.data[y][x] = piece.getName()
 
 
+    def clearLines(self):
+        """detect and clear lines"""
+        new_board_data = self.getData()
+        cleared_lines = 0
+
+        # remove all completed lines.
+        for i, row in enumerate(self.getData()):
+            if not ('' in row):
+                new_board_data.remove(row)
+                cleared_lines += 1
+
+        # add blank lines to top to compensate for removed lines.
+        for i in range(cleared_lines):
+            blank_line = ['']*self.width
+            new_board_data.insert(0, blank_line)
+
+        # rewrite board data with new data.
+        self.data = copyMatrix(new_board_data)
+
+
 class ActiveTetromino:
     """class to represent the falling tetromino"""
     def __init__(self, name:str, board:Board,
@@ -145,7 +171,7 @@ class ActiveTetromino:
 
     def getState(self):
         """returns all data needed to recreate the active piece."""
-        state = (self.getName(), self.getY(),
+        state = (self.getName(), self.getY_float(),
                  self.getX(), self.getShape())
         return state
 
@@ -228,7 +254,7 @@ class ActiveTetromino:
         # undo transformation if collisions occur.
         if colliding_cells:
             self.setState(previous_state)
-            return colliding_cells
+        return colliding_cells
 
 
 def getCollidingCells(tetromino: ActiveTetromino, board: Board):
@@ -353,9 +379,8 @@ def main(stdscr : curses.window):
     #     ['L', 'S', 'S', 'T', '', '', 'Z', 'Z', '', ''],
     #     ['S', 'S', 'T', 'T', 'T', '', '', 'Z', 'Z', '']]
 
-    # initialize an active T tetromino.
-    active_tetromino = ActiveTetromino('T', board)
-
+    bag = generateBag()
+    active_tetromino = ActiveTetromino(next(bag), board)
     # get gravity.
     gravity = getGravity(1)
 
@@ -374,9 +399,17 @@ def main(stdscr : curses.window):
             # save tetromino to board.
             board.addTetromino(active_tetromino)
 
+            # clear any new lines made.
+            board.clearLines()
+
             # pick a random new tetromino.
-            new_tetromino = ('I','J','L','O','S','T','Z')[randrange(7)]
-            active_tetromino = ActiveTetromino(new_tetromino,board)
+            try:
+                new_tetromino = next(bag)
+            except StopIteration:
+                bag = generateBag()
+                new_tetromino = next(bag)
+
+            active_tetromino = ActiveTetromino(new_tetromino, board)
             locked = False
         else:
             # turn player's input into a movement.
