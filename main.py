@@ -256,7 +256,6 @@ class ActiveTetromino:
             self.setState(previous_state)
         return colliding_cells
 
-
 def getCollidingCells(tetromino: ActiveTetromino, board: Board):
     """given an active tetromino and the board, return all points
     of overlap."""
@@ -270,8 +269,8 @@ def getCollidingCells(tetromino: ActiveTetromino, board: Board):
         # check if tetromino is out of bounds or
         # overlapping other blocks.
         is_out_of_bounds = bool(
-            y >= board.height or y < 0
-            or x >= board.width or x < 0
+            x >= board.width or x < 0
+            or y >= board.height or y < 0
         )  # border counts as collision.
         is_overlapping = bool(cell in occupied_cells)
 
@@ -280,29 +279,68 @@ def getCollidingCells(tetromino: ActiveTetromino, board: Board):
             colliding_cells.append(cell)
 
     return colliding_cells
+class Input:
+    """class used for input handling."""
+    # configure keyboard controls.
+    CONTROLS = {
+        'Move Right': curses.KEY_RIGHT,
+        'Move Left' : curses.KEY_LEFT,
+        'Soft Drop' :  curses.KEY_DOWN,
+        'Rotate Right': curses.KEY_UP,
+        'Rotate Left': ord('z'),
+    }
+
+    def __init__(self, keyboard_input):
+        self.key = keyboard_input
+
+    def getHorizontal(self):
+        """Get horizontal movement from keyboard."""
+        horizontal = 0
+        if self.key == Input.CONTROLS['Move Right']:
+           horizontal = 1
+        elif self.key == Input.CONTROLS['Move Left']:
+            horizontal = -1
+        return horizontal
+
+    def getVertical(self):
+        """Get vertical movement from keyboard."""
+        vertical = 0
+        if self.key == Input.CONTROLS['Soft Drop']:
+            vertical = 1
+        #TODO Add hard drop.
+        return vertical
+
+    def getRotational(self):
+        """get piece rotation from keyboard."""
+        rotation = 0
+        if self.key == Input.CONTROLS['Rotate Right']:
+            rotation = 1
+        if self.key == Input.CONTROLS['Rotate Left']:
+            rotation = -1
+        return rotation
 
 
-def getTransformation(keyboard_input):
-    """Get the direction of movement and rotation from keyboard input."""
-    vertical = 0
-    horizontal = 0
-    rotation = 0
 
-    if keyboard_input in (curses.KEY_RIGHT, ord('d')):  # MOVE RIGHT
-        horizontal = 1
+def getHorizontalMovement(keyboard_input):
+    """get player's chosen horizontal movement, if applicable."""
 
-    elif keyboard_input in (curses.KEY_LEFT, ord('a')):  # MOVE LEFT
+    if keyboard_input in {curses.KEY_RIGHT, ord('d')}:  # MOVE RIGHT
+         horizontal = 1
+
+    elif keyboard_input in {curses.KEY_LEFT, ord('a')}:  # MOVE LEFT
         horizontal = -1
+    else:
+        horizontal = 0
 
-    elif keyboard_input in (curses.KEY_DOWN, ord('s')):  # MOVE DOWN
-        vertical = 1
+    return horizontal
 
-    elif keyboard_input == ord('x'):  # ROTATE CLOCKWISE
-        rotation = 1
-
-    elif keyboard_input == ord('z'):  # ROTATE COUNTER-CLOCKWISE
-        rotation = -1
-    return vertical, horizontal, rotation
+    # elif keyboard_input in {curses.KEY_DOWN, ord('s')}:  # MOVE DOWN
+    #     move_y = 1
+    #
+    # elif keyboard_input in {curses.KEY_UP, ord('w')}:  # ROTATE CLOCKWISE
+    #     rotate = 1
+    # elif keyboard_input == ord('z'):  # ROTATE COUNTER-CLOCKWISE
+    #     rotation = -1
 
 
 def main(stdscr : curses.window):
@@ -379,105 +417,123 @@ def main(stdscr : curses.window):
     #     ['L', 'S', 'S', 'T', '', '', 'Z', 'Z', '', ''],
     #     ['S', 'S', 'T', 'T', 'T', '', '', 'Z', 'Z', '']]
 
-    bag = generateBag()
-    active_tetromino = ActiveTetromino(next(bag), board)
-    # get gravity.
-    gravity = getGravity(1)
 
-    # amount of frames of downward collision or movement before locking.
-    locked = False
 
     old_screen_data = None
-    keyboard_input = stdscr.getch()
-    while keyboard_input != ord('q'):
-        start = time.time()
-        # Input ──────────────────────────────────────────────────────────
-        # get keyboard input.
-        keyboard_input = stdscr.getch()
+    # generate shuffled set of each tetromino type.
+    bag = generateBag()
+    running = True
+    while running:
+        # Get the next Active Tetromino and draw to board.
+        try:
+            # get the next tetromino in the bag.
+            tetromino_name = next(bag)
+        except StopIteration :
+            # generate a new bag if there are no tetrominos left.
+            bag = generateBag()
+            tetromino_name = next(bag)
+        active_tetromino = ActiveTetromino(tetromino_name, board)
 
-        # Process ────────────────────────────────────────────────────────
-        if locked:
-            # save tetromino to board.
-            board.addTetromino(active_tetromino)
+        # initialize gravity.
+        gravity = getGravity(1)
 
-            # clear any new lines made.
+        active_phase = True
+        lock_timer = 0
+        while active_phase:
+            start = time.time()
+            # Input ──────────────────────────────────────────────────────────
+            # get keyboard input.
+            keyboard_input = stdscr.getch()
+            if keyboard_input == ord('q'):
+                return 0
+            input_handler = Input(keyboard_input)
+
+            # Process ────────────────────────────────────────────────────────
+            # clear any lines made.
             board.clearLines()
 
-            # pick a random new tetromino.
-            try:
-                new_tetromino = next(bag)
-            except StopIteration:
-                bag = generateBag()
-                new_tetromino = next(bag)
+            # get player's horizontal and rotational movement.
+            move_y = input_handler.getVertical()
+            move_x = input_handler.getHorizontal()
+            move_r = input_handler.getRotational()
 
-            active_tetromino = ActiveTetromino(new_tetromino, board)
-            locked = False
-        else:
-            # turn player's input into a movement.
-            movement = getTransformation(keyboard_input)
+            # apply horizontal and rotational movement to tetromino.
+            horizontal_collisions = (
+                active_tetromino.tryTransform(0, move_x, move_r))
 
-            # apply player movement to tetromino.
-            movement_collisions = active_tetromino.tryTransform(0, *movement[1:])
 
-            # apply gravity to tetromino if the player isnt moving down.
-            if not movement[0]:
-                gravity_collisions = active_tetromino.tryTransform(gravity, 0, 0)
-            else:
-                gravity_collisions = active_tetromino.tryTransform(movement[0], 0, 0)
+            # apply vertical movement to tetromino separately.
+            if move_y == 0: move_y = gravity
+            vertical_collisions = (
+                active_tetromino.tryTransform(move_y, 0, 0))
 
-            # lock piece if a collision is detected.
-            if gravity_collisions:
-                locked = True
+            # if piece lands on the ground or another piece, exit active phase.
+            if vertical_collisions:
+                # reset lock timer if piece moved.
+                if (move_x or move_r) and not horizontal_collisions:
+                    lock_timer = 0
+                if move_y != gravity:
+                    lock_timer += 2.5
+                else:
+                    lock_timer += 1
+            if lock_timer >= 5:
+                active_phase = False
 
-        # prepare to draw all board data and the active tetromino to the
-        # screen.
-        screen_data = copyMatrix(board.getData())
-        for (y, x) in active_tetromino.getOccupiedCells():
-            screen_data[y][x] = active_tetromino.getName()
 
-        # determine if screen data has changed since last time.
-        screen_changed = bool(screen_data != old_screen_data)
+            # prepare to draw all board data and the active tetromino to the
+            # screen.
+            screen_data = copyMatrix(board.getData())
+            for (y, x) in active_tetromino.getOccupiedCells():
+                screen_data[y][x] = active_tetromino.getName()
 
-        # Output ─────────────────────────────────────────────────────────
-        # only refresh the board if the data changed.
-        if screen_changed:
-            # clear board.
-            board_win.clear()
+            # determine if screen data has changed since last time.
+            screen_changed = bool(screen_data != old_screen_data)
 
-            # draw board.
-            board_win.border()
-            h_shift = BOARD_PADDING//2
-            v_shift = BOARD_PADDING//4
+            # Output ─────────────────────────────────────────────────────────
+            # only refresh the board if the data changed.
+            if screen_changed:
+                # clear board.
+                board_win.clear()
 
-            # draw column markers.
-            for i in range(BOARD_WIDTH):
-                column_number = str(i).ljust(2)
-                i = i*len(BLOCK_GLYPH)
-                board_win.addstr(0, i+h_shift, column_number)
+                # draw board.
+                board_win.border()
+                h_shift = BOARD_PADDING//2
+                v_shift = BOARD_PADDING//4
 
-            # draw row markers.
-            for i in range(BOARD_HEIGHT):
-                row_number = str(i).ljust(2)
-                board_win.addstr(i+v_shift, 0, row_number)
+                # draw column markers.
+                for i in range(BOARD_WIDTH):
+                    column_number = str(i).ljust(2)
+                    i = i*len(BLOCK_GLYPH)
+                    board_win.addstr(0, i+h_shift, column_number)
 
-            # display current game state.
-            for y, row in enumerate(screen_data):
-                for x, color in enumerate(row):
-                    x = x * GLYPH_LENGTH
-                    if not color:
-                        board_win.addstr(y + v_shift, x + h_shift,
-                                         EMPTY_GLYPH)
-                    else:
-                        board_win.addstr(y + v_shift, x + h_shift,
-                                         BLOCK_GLYPH,
-                                         COLOR_PAIRS[color])
-            board_win.refresh()
-        old_screen_data = screen_data
+                # draw row markers.
+                for i in range(BOARD_HEIGHT):
+                    row_number = str(i).ljust(2)
+                    board_win.addstr(i+v_shift, 0, row_number)
 
-        # keep frame rate at roughly 60fps
-        sleep_time = 1/60 - (time.time()-start)
-        if sleep_time > 0:
-            time.sleep(sleep_time)
+                # display current game state.
+                for y, row in enumerate(screen_data):
+                    for x, color in enumerate(row):
+                        x = x * GLYPH_LENGTH
+                        if not color:
+                            board_win.addstr(y + v_shift, x + h_shift,
+                                             EMPTY_GLYPH)
+                        else:
+                            board_win.addstr(y + v_shift, x + h_shift,
+                                             BLOCK_GLYPH,
+                                             COLOR_PAIRS[color])
+                board_win.refresh()
+            old_screen_data = screen_data
+
+            # keep frame rate at roughly 60fps
+            sleep_time = 1/60 - (time.time()-start)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+        # save tetromino to board and clear any lines created.
+        board.addTetromino(active_tetromino)
+        board.clearLines()
+
     # Terminate ──────────────────────────────────────────────────────
 
     return 0  # Return 0 indicates a successful completion

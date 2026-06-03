@@ -27,3 +27,14 @@ collision detection:
 			return 1 if ANY position overlaps with board data.
 			else: return 0
 	if detectCollision(): keep currentState as it is.
+
+game cycles through three states:
+1. move tetromino
+while q not pressed:
+	generate next tetromino
+	while new tetromino is in play (not locked):
+		gameplay logic...
+		if collision with ground --> lock tetromino.
+	save tetromino to board data
+	clear any lines in board data
+	update score
