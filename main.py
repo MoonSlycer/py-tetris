@@ -23,7 +23,7 @@ curses.curs_set(0)
 Matrix = list[list]
 
 
-def emptyMatrix(height:int, width:int):
+def empty_matrix(height:int, width:int):
     """return a string matrix of empty strings ('') from given height and
      width.
      """
@@ -33,7 +33,7 @@ def emptyMatrix(height:int, width:int):
     return matrix
 
 
-def copyMatrix(matrix:Matrix):
+def copy_matrix(matrix:Matrix):
     """copy the String Matrix smoothly."""
     new_matrix = [row.copy() for row in matrix]
     return new_matrix
@@ -72,7 +72,7 @@ def getTetrominoShape(tetromino_name):
               [0, 1, 1],
               [0, 0, 0]],
     }
-    return copyMatrix(tetrominos[tetromino_name])
+    return copy_matrix(tetrominos[tetromino_name])
 
 def generateBag():
     """use generator to generate 'bags' of pieces."""
@@ -115,10 +115,10 @@ class Board:
     def __init__(self, height:int, width:int):
         self.height = height
         self.width = width
-        self.data = emptyMatrix(height, width)
+        self.data = empty_matrix(height, width)
 
     def getData(self):
-        return copyMatrix(self.data)
+        return copy_matrix(self.data)
 
     def getOccupiedCells(self):
         """get all occupied positions on the board."""
@@ -136,23 +136,15 @@ class Board:
 
 
     def clearLines(self):
-        """detect and clear lines"""
-        new_board_data = self.getData()
-        cleared_lines = 0
-
-        # remove all completed lines.
-        for i, row in enumerate(self.getData()):
-            if not ('' in row):
-                new_board_data.remove(row)
-                cleared_lines += 1
-
-        # add blank lines to top to compensate for removed lines.
-        for i in range(cleared_lines):
-            blank_line = ['']*self.width
-            new_board_data.insert(0, blank_line)
-
-        # rewrite board data with new data.
-        self.data = copyMatrix(new_board_data)
+        """each completed line gets cleared, then """
+        for i, row in enumerate(self.data):
+            is_line = bool('' not in row)
+            if is_line:
+                # pop completed line from data.
+                row = self.data.pop(i)
+                # clear row.
+                row = ['']*self.width
+                self.data.insert(0, row)
 
 
 class ActiveTetromino:
@@ -188,7 +180,7 @@ class ActiveTetromino:
         return self.name
 
     def getShape(self):
-        return copyMatrix(self.shape)
+        return copy_matrix(self.shape)
 
     def setShape(self, new_shape:Matrix):
         self.shape = new_shape
@@ -221,7 +213,7 @@ class ActiveTetromino:
         if not (direction in {-1, 1}):
             new_shape = self.getShape()
         else:
-            new_shape = emptyMatrix(self.height, self.width)
+            new_shape = empty_matrix(self.height, self.width)
             max_y = self.height - 1
             max_x = self.width - 1
             for y, row in enumerate(self.shape):
@@ -404,12 +396,15 @@ def main(stdscr : curses.window):
 
     # create board
     board = Board(BOARD_HEIGHT, BOARD_WIDTH)
+    HEIGHT, WIDTH = stdscr.getmaxyx()
+    center_y = HEIGHT//2 - (BOARD_HEIGHT + BOARD_PADDING//2)//2
+    center_x = WIDTH//2 - (BOARD_WIDTH * GLYPH_LENGTH + BOARD_PADDING)//2
 
     # setup curses board window.
     board_win = curses.newwin(
         BOARD_HEIGHT + BOARD_PADDING//2,
         BOARD_WIDTH * GLYPH_LENGTH + BOARD_PADDING,
-        3, 3
+        center_y, center_x
     )
     # DEBUGGING ONLY -- place blocks on board already.
     # board.data[17:] = [
@@ -435,7 +430,7 @@ def main(stdscr : curses.window):
         active_tetromino = ActiveTetromino(tetromino_name, board)
 
         # initialize gravity.
-        gravity = getGravity(1)
+        gravity = getGravity(3)
 
         active_phase = True
         lock_timer = 0
@@ -482,7 +477,7 @@ def main(stdscr : curses.window):
 
             # prepare to draw all board data and the active tetromino to the
             # screen.
-            screen_data = copyMatrix(board.getData())
+            screen_data = copy_matrix(board.getData())
             for (y, x) in active_tetromino.getOccupiedCells():
                 screen_data[y][x] = active_tetromino.getName()
 
