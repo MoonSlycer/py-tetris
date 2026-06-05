@@ -74,12 +74,42 @@ def getTetrominoShape(tetromino_name):
     }
     return copy_matrix(tetrominos[tetromino_name])
 
-def generateBag():
-    """use generator to generate 'bags' of pieces."""
-    bag = ['I','J','L','O','S','T','Z']
-    shuffle(bag)
-    for piece in bag:
-        yield piece
+class PieceSequence:
+    """represents the order in which pieces are given to player."""
+    TETROMINOES = ['I', 'J', 'L', 'O', 'S', 'T', 'Z']
+
+    def __init__(self, preview_length:int=1):
+        """initialize the queue of tetrominoes."""
+        self.preview_length = preview_length
+        self.queue = []
+        self.queue += self.generate_bag()
+        self.active_piece = None
+
+    def advance(self):
+        """Move the next active piece, generate new bag if necessary."""
+        if not self.get_remaining():
+            self.queue += self.generate_bag()
+        self.active_piece = self.queue.pop(0)
+
+    def get_active(self):
+        """return the active piece."""
+        return self.active_piece
+
+    def get_preview(self):
+        """return the preview slice that will be shown to the player."""
+        preview = self.queue[:self.preview_length]
+        return preview
+
+    def get_remaining(self):
+        """return the pieces in the queue that exist outside the preview."""
+        remaining = self.queue[self.preview_length:]
+        return remaining
+
+    def generate_bag(self):
+        """generate a shuffled bag."""
+        bag = self.TETROMINOES.copy()
+        shuffle(bag)
+        return bag
 
 
 def getGravity(current_level):
@@ -156,6 +186,7 @@ class ActiveTetromino:
         self.board = board
         self.y = init_y
         self.x = init_x
+        self.is_locked = False
 
         self.shape = getTetrominoShape(name)
         self.height = len(self.shape)
@@ -230,6 +261,11 @@ class ActiveTetromino:
         self.y += move_y
         self.x += move_x
 
+    def transform(self, move_y:float, move_x:int, move_r:int):
+        self.y += move_y
+        self.x += move_x
+        self.rotate(move_r)
+
     def tryTransform(self, move_y:float, move_x:int,
                      rotate_dir:int):
         """attempt to transform the active tetromino."""
@@ -299,7 +335,6 @@ class Input:
         vertical = 0
         if self.key == Input.CONTROLS['Soft Drop']:
             vertical = 1
-        #TODO Add hard drop.
         return vertical
 
     def getRotational(self):
@@ -310,29 +345,6 @@ class Input:
         if self.key == Input.CONTROLS['Rotate Left']:
             rotation = -1
         return rotation
-
-
-
-def getHorizontalMovement(keyboard_input):
-    """get player's chosen horizontal movement, if applicable."""
-
-    if keyboard_input in {curses.KEY_RIGHT, ord('d')}:  # MOVE RIGHT
-         horizontal = 1
-
-    elif keyboard_input in {curses.KEY_LEFT, ord('a')}:  # MOVE LEFT
-        horizontal = -1
-    else:
-        horizontal = 0
-
-    return horizontal
-
-    # elif keyboard_input in {curses.KEY_DOWN, ord('s')}:  # MOVE DOWN
-    #     move_y = 1
-    #
-    # elif keyboard_input in {curses.KEY_UP, ord('w')}:  # ROTATE CLOCKWISE
-    #     rotate = 1
-    # elif keyboard_input == ord('z'):  # ROTATE COUNTER-CLOCKWISE
-    #     rotation = -1
 
 
 def main(stdscr : curses.window):
@@ -406,74 +418,78 @@ def main(stdscr : curses.window):
         BOARD_WIDTH * GLYPH_LENGTH + BOARD_PADDING,
         center_y, center_x
     )
-    # DEBUGGING ONLY -- place blocks on board already.
-    # board.data[17:] = [
-    #     ['L', 'L', 'L', '', '', '', '', '', '', ''],
-    #     ['L', 'S', 'S', 'T', '', '', 'Z', 'Z', '', ''],
-    #     ['S', 'S', 'T', 'T', 'T', '', '', 'Z', 'Z', '']]
 
-
-
+    # initialize the piece queue.
+    piece_queue = PieceSequence()
     old_screen_data = None
-    # generate shuffled set of each tetromino type.
-    bag = generateBag()
+
+    # begin gameplay loop.
     running = True
     while running:
-        # Get the next Active Tetromino and draw to board.
-        try:
-            # get the next tetromino in the bag.
-            tetromino_name = next(bag)
-        except StopIteration :
-            # generate a new bag if there are no tetrominos left.
-            bag = generateBag()
-            tetromino_name = next(bag)
-        active_tetromino = ActiveTetromino(tetromino_name, board)
+        # advance the piece queue.
+        piece_queue.advance()
+
+        # get the active tetromino from the queue, instantiate it.
+        active_tetromino = ActiveTetromino(
+            piece_queue.get_active(),
+            board)
 
         # initialize gravity.
         gravity = getGravity(3)
 
-        active_phase = True
+        # initialize lock timer.
         lock_timer = 0
-        while active_phase:
-            start = time.time()
+        # loop until tetromino gets locked down.
+        while not (active_tetromino.is_locked):
+            start = time.time() # begin a timer.
+
             # Input ──────────────────────────────────────────────────────────
-            # get keyboard input.
-            keyboard_input = stdscr.getch()
-            if keyboard_input == ord('q'):
-                return 0
-            input_handler = Input(keyboard_input)
+            # get the keyboard input from the player.
+            key_pressed = stdscr.getch()
+            player_input = Input(key_pressed)
 
             # Process ────────────────────────────────────────────────────────
-            # clear any lines made.
-            board.clearLines()
+            # quit the game if player presses 'q'.
+            if key_pressed == ord('q'): quit()
 
-            # get player's horizontal and rotational movement.
-            move_y = input_handler.getVertical()
-            move_x = input_handler.getHorizontal()
-            move_r = input_handler.getRotational()
+            # determine the player's horizontal and rotational movements.
+            move_x = player_input.getHorizontal()
+            move_r = player_input.getRotational()
 
-            # apply horizontal and rotational movement to tetromino.
-            horizontal_collisions = (
-                active_tetromino.tryTransform(0, move_x, move_r))
+            # determine player's vertical movements.
+            move_y = player_input.getVertical()
+            if not move_y: move_y = gravity
 
+            # try each movement individually, get collisions.
+            active_tetromino.x += move_x
+            x_collisions = getCollidingCells(active_tetromino, board)
+            if x_collisions:
+                active_tetromino.x -= move_x
 
-            # apply vertical movement to tetromino separately.
-            if move_y == 0: move_y = gravity
-            vertical_collisions = (
-                active_tetromino.tryTransform(move_y, 0, 0))
+            active_tetromino.rotate(move_r)
+            r_collisions = getCollidingCells(active_tetromino, board)
+            if r_collisions:
+                active_tetromino.rotate(-move_r)
 
-            # if piece lands on the ground or another piece, exit active phase.
-            if vertical_collisions:
-                # reset lock timer if piece moved.
-                if (move_x or move_r) and not horizontal_collisions:
+            active_tetromino.y += move_y
+            y_collisions = getCollidingCells(active_tetromino, board)
+            if y_collisions:
+                active_tetromino.y -= move_y
+
+            # determine how much the piece is locked down.
+            if y_collisions:
+                # reset the lock timer if the piece rotates or moves laterally.
+                if move_x or move_r:
                     lock_timer = 0
-                if move_y != gravity:
-                    lock_timer += 2.5
+                elif move_y:
+                    # increase lock timer by 2 if player is pressing down.
+                    lock_timer += 2
                 else:
                     lock_timer += 1
-            if lock_timer >= 5:
-                active_phase = False
 
+            # lock the piece if the lock timer exceeds 5.
+            if lock_timer >= 5:
+                active_tetromino.is_locked = True
 
             # prepare to draw all board data and the active tetromino to the
             # screen.
