@@ -22,7 +22,6 @@ curses.curs_set(0)
 # 2D array of strings. used a lot in this game's logic.
 Matrix = list[list]
 
-
 def empty_matrix(height:int, width:int):
     """return a string matrix of empty strings ('') from given height and
      width.
@@ -41,38 +40,39 @@ def copy_matrix(matrix:Matrix):
 
 def getTetrominoShape(tetromino_name):
     """return the shape of the tetromino, given its name"""
-    tetrominos = {
-        'I': [[0, 0, 0, 0],
-              [1, 1, 1, 1],
-              [0, 0, 0, 0],
-              [0, 0, 0, 0]],
+    tetrominoes = {
+        'I': [['', '', '', ''],
+              ['I', 'I', 'I', 'I'],
+              ['', '', '', ''],
+              ['', '', '', '']],
 
-        'J': [[1, 0, 0],
-              [1, 1, 1],
-              [0, 0, 0]],
+        'J': [['J', '', ''],
+              ['J', 'J', 'J'],
+              ['', '', '']],
 
-        'L': [[0, 0, 1],
-              [1, 1, 1],
-              [0, 0, 0]],
+        'L': [['', '', 'L'],
+              ['L', 'L', 'L'],
+              ['', '', '']],
 
-        'O': [[0, 0, 0, 0],
-              [0, 1, 1, 0],
-              [0, 1, 1, 0],
-              [0, 0, 0, 0]],
+        'O': [['', '', '', ''],
+              ['', 'O', 'O', ''],
+              ['', 'O', 'O', ''],
+              ['', '', '', '']],
 
-        'S': [[0, 1, 1],
-              [1, 1, 0],
-              [0, 0, 0]],
+        'S': [['', 'S', 'S'],
+              ['S', 'S', ''],
+              ['', '', '']],
 
-        'T': [[0, 1, 0],
-              [1, 1, 1],
-              [0, 0, 0]],
+        'T': [['', 'T', ''],
+              ['T', 'T', 'T'],
+              ['', '', '']],
 
-        'Z': [[1, 1, 0],
-              [0, 1, 1],
-              [0, 0, 0]],
+        'Z': [['Z', 'Z', ''],
+              ['', 'Z', 'Z'],
+              ['', '', '']],
     }
-    return copy_matrix(tetrominos[tetromino_name])
+    return copy_matrix(tetrominoes[tetromino_name])
+
 
 class PieceSequence:
     """represents the order in which pieces are given to player."""
@@ -139,13 +139,68 @@ def getGravity(current_level):
     }
     return speed_curve[current_level]
 
+class GameWindow():
+    """represents the curses window that the board and active piece are
+    drawn to.
+    """
+    # set up glyphs.
+    BLOCK_GLYPH = '[]'
+    GLYPH_LENGTH = len(BLOCK_GLYPH)
+    EMPTY_GLYPH = '.' * GLYPH_LENGTH
 
-class Board:
-    """represents current state of the board."""
-    def __init__(self, height:int, width:int):
+    def __init__(self, height:int, width:int, padding:int):
         self.height = height
         self.width = width
-        self.data = empty_matrix(height, width)
+
+        # each character is twice as tall as it is wide, so the
+        #   vertical padding must be cut in half to make the padding
+        #   appear square.
+        self.h_pad = padding * self.GLYPH_LENGTH
+        self.v_pad = padding
+
+        self.v_offset = self.v_pad // 2
+        self.h_offset = self.h_pad // 2
+
+        # create curses window.
+        win_height = self.height + self.v_pad
+        win_width = self.width * self.GLYPH_LENGTH + self.h_pad
+        self.win = curses.newwin(win_height + 2, win_width + 2)
+
+    def render_data(self, screen_data:Matrix, color_pairs:dict=None):
+        """render all screen data to game window."""
+        # clear window.
+        self.win.clear()
+
+        # render screen data to window, cell by cell.
+        for y, row in enumerate(screen_data):
+            for x, cell in enumerate(row):
+                # determine what glyph and color to use to render the cell.
+                if not cell:
+                    glyph = self.EMPTY_GLYPH
+                    color = 0
+                else:
+                    glyph = self.BLOCK_GLYPH
+                    if color_pairs: color = color_pairs[cell]
+                    else: color = 0
+
+                # calculate where in the window to render the glyph.
+                glyph_y = y + self.v_offset + 1
+                glyph_x = (x * self.GLYPH_LENGTH) + self.h_offset + 1
+
+                # render the glyph in the appropriate color.
+                self.win.addstr(glyph_y, glyph_x, glyph, color)
+
+            # refresh window.
+            self.win.refresh()
+
+
+class Board(GameWindow):
+    """represents current state of the board."""
+    def __init__(self, height:int, width:int,
+                 buffer_zone:int, padding:int):
+        super().__init__(height, width, padding)
+        self.buffer_zone = buffer_zone
+        self.data = empty_matrix(height+buffer_zone, width)
 
     def getData(self):
         return copy_matrix(self.data)
@@ -163,18 +218,36 @@ class Board:
         """add locked tetromino to board data."""
         for (y, x) in piece.getOccupiedCells():
             self.data[y][x] = piece.getName()
-
-
     def clearLines(self):
         """each completed line gets cleared, then """
+        line_count = 0
         for i, row in enumerate(self.data):
             is_line = bool('' not in row)
             if is_line:
+                line_count += 1
                 # pop completed line from data.
                 row = self.data.pop(i)
                 # clear row.
                 row = ['']*self.width
                 self.data.insert(0, row)
+        return line_count
+    def render_data(self, screen_data, color_pairs=None):
+        super().render_data(screen_data, color_pairs)
+        self.win.box()
+        self.win.refresh()
+
+class Preview(GameWindow):
+    """represents the piece preview."""
+    EMPTY_GLYPH = ' ' * GameWindow.GLYPH_LENGTH
+    def __init__(self, height:int, width:int, padding:int):
+        super().__init__(height, width, padding)
+
+    def render_data(self, piece_name:str, color_pairs:dict=None):
+        """render a piece based on its name."""
+        piece_shape = getTetrominoShape(piece_name)
+        self.h_offset = 4-len(piece_shape)
+        self.v_offset = 4-len(piece_shape)
+        super().render_data(piece_shape, color_pairs)
 
 
 class ActiveTetromino:
@@ -284,6 +357,7 @@ class ActiveTetromino:
             self.setState(previous_state)
         return colliding_cells
 
+
 def getCollidingCells(tetromino: ActiveTetromino, board: Board):
     """given an active tetromino and the board, return all points
     of overlap."""
@@ -298,7 +372,7 @@ def getCollidingCells(tetromino: ActiveTetromino, board: Board):
         # overlapping other blocks.
         is_out_of_bounds = bool(
             x >= board.width or x < 0
-            or y >= board.height or y < 0
+            or y >= board.height+board.buffer_zone or y < 0
         )  # border counts as collision.
         is_overlapping = bool(cell in occupied_cells)
 
@@ -307,6 +381,8 @@ def getCollidingCells(tetromino: ActiveTetromino, board: Board):
             colliding_cells.append(cell)
 
     return colliding_cells
+
+
 class Input:
     """class used for input handling."""
     # configure keyboard controls.
@@ -346,6 +422,16 @@ class Input:
             rotation = -1
         return rotation
 
+def center_window(outer_win: curses.window,
+                  inner_win:curses.window):
+    """center a window within another window."""
+    outer_height, outer_width = outer_win.getmaxyx()
+    inner_height, inner_width = inner_win.getmaxyx()
+
+    center_y = outer_height//2 - inner_height//2
+    center_x = outer_width//2 - inner_width//2
+
+    inner_win.mvwin(center_y, center_x)
 
 def main(stdscr : curses.window):
     # Initialize ─────────────────────────────────────────────────────
@@ -397,45 +483,60 @@ def main(stdscr : curses.window):
         curses.init_pair(pair_number, color, curses.COLOR_BLACK)
         COLOR_PAIRS[tetromino] = curses.color_pair(pair_number)
 
-    # board setup.
-    BLOCK_GLYPH = '[]'
-    GLYPH_LENGTH = len(BLOCK_GLYPH)
-    EMPTY_GLYPH = '.' * GLYPH_LENGTH
-
+    # board setup
     BOARD_HEIGHT = 20
     BOARD_WIDTH = 10
-    BOARD_PADDING = 8
+    BUFFER_ZONE = 20
+    BOARD_PADDING = 3
+    board = Board(BOARD_HEIGHT, BOARD_WIDTH, BUFFER_ZONE, BOARD_PADDING)
 
-    # create board
-    board = Board(BOARD_HEIGHT, BOARD_WIDTH)
-    HEIGHT, WIDTH = stdscr.getmaxyx()
-    center_y = HEIGHT//2 - (BOARD_HEIGHT + BOARD_PADDING//2)//2
-    center_x = WIDTH//2 - (BOARD_WIDTH * GLYPH_LENGTH + BOARD_PADDING)//2
 
-    # setup curses board window.
-    board_win = curses.newwin(
-        BOARD_HEIGHT + BOARD_PADDING//2,
-        BOARD_WIDTH * GLYPH_LENGTH + BOARD_PADDING,
-        center_y, center_x
-    )
+    # piece preview setup.
+    PREVIEW_HEIGHT = 4
+    PREVIEW_WIDTH = 5
+    PREVIEW_PADDING = 0
+    PREVIEW_COUNT = 5
 
-    # initialize the piece queue.
-    piece_queue = PieceSequence()
-    old_screen_data = None
+    previews = []
+    for i in range(PREVIEW_COUNT):
+        preview = Preview(PREVIEW_HEIGHT, PREVIEW_WIDTH,
+                               PREVIEW_PADDING)
+        preview.win.mvwin(i * (PREVIEW_HEIGHT),
+                          board.win.getmaxyx()[1] + 2)
+        previews.append(preview)
+
+    # initialize piece queue.
+    piece_queue = PieceSequence(PREVIEW_COUNT)
+
 
     # begin gameplay loop.
     running = True
+    old_screen_data = None # initialize old screen data. (for drawing output)
+    lines_cleared = 0
+    level = 1
     while running:
         # advance the piece queue.
         piece_queue.advance()
 
+        # render piece preview.
+        for i in range(PREVIEW_COUNT):
+            piece = piece_queue.get_preview()[i]
+            previews[i].render_data(piece, COLOR_PAIRS)
+
+
         # get the active tetromino from the queue, instantiate it.
         active_tetromino = ActiveTetromino(
             piece_queue.get_active(),
-            board)
+            board, BUFFER_ZONE-2)
 
-        # initialize gravity.
-        gravity = getGravity(3)
+        # determine which level the player is on.
+        line_thresh = 10
+        if lines_cleared >= line_thresh:
+            level += 1
+            lines_cleared = line_thresh-lines_cleared
+
+        # determine gravity based on level.
+        gravity = getGravity(level)
 
         # initialize lock timer.
         lock_timer = 0
@@ -493,59 +594,46 @@ def main(stdscr : curses.window):
 
             # prepare to draw all board data and the active tetromino to the
             # screen.
-            screen_data = copy_matrix(board.getData())
+            screen_data = copy_matrix(board.getData()[BUFFER_ZONE:])
             for (y, x) in active_tetromino.getOccupiedCells():
-                screen_data[y][x] = active_tetromino.getName()
+                if y >= BUFFER_ZONE:
+                    screen_data[y-BUFFER_ZONE][x] = active_tetromino.getName()
 
-            # determine if screen data has changed since last time.
-            screen_changed = bool(screen_data != old_screen_data)
-
-            # Output ─────────────────────────────────────────────────────────
-            # only refresh the board if the data changed.
-            if screen_changed:
-                # clear board.
-                board_win.clear()
-
-                # draw board.
-                board_win.border()
-                h_shift = BOARD_PADDING//2
-                v_shift = BOARD_PADDING//4
-
-                # draw column markers.
-                for i in range(BOARD_WIDTH):
-                    column_number = str(i).ljust(2)
-                    i = i*len(BLOCK_GLYPH)
-                    board_win.addstr(0, i+h_shift, column_number)
-
-                # draw row markers.
-                for i in range(BOARD_HEIGHT):
-                    row_number = str(i).ljust(2)
-                    board_win.addstr(i+v_shift, 0, row_number)
-
-                # display current game state.
-                for y, row in enumerate(screen_data):
-                    for x, color in enumerate(row):
-                        x = x * GLYPH_LENGTH
-                        if not color:
-                            board_win.addstr(y + v_shift, x + h_shift,
-                                             EMPTY_GLYPH)
-                        else:
-                            board_win.addstr(y + v_shift, x + h_shift,
-                                             BLOCK_GLYPH,
-                                             COLOR_PAIRS[color])
-                board_win.refresh()
+            # Output ────────────────────────────────────────────────────────
+            # only redraw the board if there is a difference in the output.
+            if screen_data != old_screen_data:
+                board.render_data(screen_data, COLOR_PAIRS)
             old_screen_data = screen_data
 
-            # keep frame rate at roughly 60fps
+            # keep frame rate at roughly 60fps.
             sleep_time = 1/60 - (time.time()-start)
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
-        # save tetromino to board and clear any lines created.
+        # save tetromino to board data and clear any lines created.
         board.addTetromino(active_tetromino)
-        board.clearLines()
+        lines_cleared += board.clearLines()
+
+        # detect gameover.
+        buffer_zone = board.getData()[:BUFFER_ZONE]
+        for row in buffer_zone:
+            for cell in row:
+                if cell:
+                    running = False
+                    # make everything white.
+                    screen_data = copy_matrix(board.getData()[BUFFER_ZONE:])
+                    board.render_data(screen_data)
+                    for i in range(PREVIEW_COUNT):
+                        piece = piece_queue.get_preview()[i]
+                        previews[i].render_data(piece)
+
+
 
     # Terminate ──────────────────────────────────────────────────────
+    # wait for user to quit a final time before quitting.
+    key_pressed = stdscr.getch()
+    while key_pressed != ord('q'):
+        key_pressed = stdscr.getch()
 
     return 0  # Return 0 indicates a successful completion
 
