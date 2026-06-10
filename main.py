@@ -582,7 +582,7 @@ def main(stdscr : curses.window):
     stats = PlayerStats()
 
     # begin gameplay loop.
-    gameover = True
+    gameover = False
     while not gameover:
         # advance the piece queue.
         piece_queue.advance()
